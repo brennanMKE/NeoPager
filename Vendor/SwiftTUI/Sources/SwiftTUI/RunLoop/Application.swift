@@ -13,6 +13,11 @@ public class Application {
 
     private var arrowKeyParser = ArrowKeyParser()
 
+    // NeoPager patch: when set, this app owns all keyboard input. Each input chunk
+    // is decoded into RawKeyEvents (arrows, Option/Page, Esc, printable chars) and
+    // delivered here, bypassing SwiftTUI's focus-based handling. See RawKey.swift.
+    public var keyHandler: ((RawKeyEvent) -> Void)?
+
     private var invalidatedNodes: [Node] = []
     private var updateScheduled = false
 
@@ -93,6 +98,14 @@ public class Application {
         let data = FileHandle.standardInput.availableData
 
         guard let string = String(data: data, encoding: .utf8) else {
+            return
+        }
+
+        // NeoPager patch: a raw key handler takes over input entirely.
+        if let keyHandler {
+            for event in RawKeyParser.parse(string) {
+                keyHandler(event)
+            }
             return
         }
 
@@ -178,6 +191,13 @@ public class Application {
         renderer.stop()
         resetInputMode() // Fix for: https://github.com/rensbreur/SwiftTUI/issues/25
         exit(0)
+    }
+
+    // NeoPager patch: public clean-shutdown entry. Restores the terminal (exits the
+    // alternate screen, shows the cursor, restores cooked mode) and exits 0 —
+    // exactly what SIGINT/Ctrl-C does. Used by the pager's Esc handler.
+    public func quit() {
+        stop()
     }
 
     /// Fix for: https://github.com/rensbreur/SwiftTUI/issues/25

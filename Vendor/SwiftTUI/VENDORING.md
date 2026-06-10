@@ -24,7 +24,14 @@ Carrying a patched copy is the option chosen for this project (over a GitHub for
 
 Each patch is marked in-source with a `// NeoPager patch:` comment.
 
-(none yet — patches are applied per issue; see this list as they land)
+- **Raw key events (#0004).**
+  - `RunLoop/RawKey.swift` (new): `RawKeyEvent` enum + `RawKeyParser` chunk decoder
+    for arrows, Option/Meta-arrows, Page Up/Down, bare Esc, Enter, Backspace, and
+    printable characters.
+  - `RunLoop/Application.swift`: added `public var keyHandler: ((RawKeyEvent) -> Void)?`;
+    `handleInput` routes the whole chunk through `RawKeyParser` to that handler when
+    set, bypassing focus-based key handling; added `public func quit()` exposing the
+    private `stop()` for a clean Esc-driven shutdown.
 
 ## Trimmed from upstream
 
