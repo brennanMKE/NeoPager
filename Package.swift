@@ -5,14 +5,20 @@ import PackageDescription
 
 // Important: Use these settings for most targets.
 let swiftSettings: [SwiftSetting] = [
-    .enableUpcomingFeature("StrictConcurrency"),
     .defaultIsolation(MainActor.self),
 ]
 
 let package = Package(
     name: "NeoPager",
+    platforms: [
+        .macOS(.v13),
+    ],
+    products: [
+        .executable(name: "neopager", targets: ["NeoPager"]),
+    ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.2.0"),
+        .package(url: "https://github.com/rensbreur/SwiftTUI.git", branch: "main"),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -21,10 +27,10 @@ let package = Package(
             name: "NeoPager",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "SwiftTUI", package: "SwiftTUI"),
             ],
             swiftSettings: swiftSettings
         ),
-
     ],
     swiftLanguageModes: [.v6]
 )

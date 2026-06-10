@@ -39,7 +39,7 @@ release() {
 }
 
 run() {
-    swift run NeoPager
+    swift run neopager
 }
 
 if (( $# == 0 )); then
