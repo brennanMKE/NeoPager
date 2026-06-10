@@ -35,6 +35,7 @@ Applying a TUI approach — a persistent, visible status line and predictable, a
 
 - Editing, multi-file navigation, or `less`-style command language.
 - Following a growing file (`tail -f` / `less +F` mode).
+- Streaming / incremental input. Phase 1 reads all content up front into a line buffer before the TUI starts (like `more`; `less` streams). Eager reading also lets stdin be fully drained before interactive input is rebound to `/dev/tty` (#0003). Incremental reading is a possible later enhancement, not a current goal.
 - Linux/terminal-matrix portability. Phase 1 targets macOS terminals (Terminal.app, iTerm2, Ghostty).
 
 ---
