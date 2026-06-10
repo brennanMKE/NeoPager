@@ -33,6 +33,10 @@ let package = Package(
             ],
             swiftSettings: swiftSettings
         ),
+        .testTarget(
+            name: "NeoPagerTests",
+            dependencies: ["NeoPager"]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )
