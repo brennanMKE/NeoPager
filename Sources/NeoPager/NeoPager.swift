@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import SwiftTUI
 
 @main
 struct NeoPager: ParsableCommand {
@@ -24,10 +25,31 @@ struct NeoPager: ParsableCommand {
             throw ExitCode.failure
         }
 
-        // Placeholder until the viewport (#0005) lands: with no UI yet, a pager
-        // is just `cat`. This proves both input modes load correctly.
-        for line in lines {
-            print(line)
+        // Size the viewport from the terminal (status bar reserves one row).
+        let size = TerminalSize.current() ?? (rows: 24, columns: 80)
+        let viewportHeight = max(1, size.rows - 1)
+        let state = PagerState(lines: lines, viewportHeight: viewportHeight)
+        state.setViewport(height: viewportHeight, width: size.columns)
+
+        // Rebind keyboard input to the controlling terminal before SwiftTUI takes
+        // over stdin — in `cmd | neopager`, fd 0 is the now-drained pipe (#0003).
+        TTYInput.reattachToControllingTerminal()
+
+        // ArgumentParser calls run() on the main thread, so assumeIsolated is safe.
+        MainActor.assumeIsolated {
+            let app = Application(rootView: PagerView(state: state))
+            app.keyHandler = { [weak app] event in
+                switch event {
+                case .up:       state.lineUp()
+                case .down:     state.lineDown()
+                case .pageUp:   state.pageUp()
+                case .pageDown: state.pageDown()
+                case .escape:   app?.quit()
+                case .left, .right, .enter, .backspace, .char:
+                    break // unused in phase 1; search input arrives in phase 2
+                }
+            }
+            app.start() // calls dispatchMain(); never returns
         }
     }
 }

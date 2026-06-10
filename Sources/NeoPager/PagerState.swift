@@ -12,6 +12,9 @@ nonisolated final class PagerState: ObservableObject {
     /// Number of content rows visible at once (terminal height minus the status bar).
     private(set) var viewportHeight: Int
 
+    /// Terminal width in columns, used for truncation and status-bar layout.
+    private(set) var viewportWidth: Int = 0
+
     /// Index of the first visible line (0-based). Always within `0 ... maxOffset`.
     private(set) var offset: Int = 0
 
@@ -66,6 +69,19 @@ nonisolated final class PagerState: ObservableObject {
         guard newHeight != viewportHeight || newOffset != offset else { return }
         objectWillChange.send()
         viewportHeight = newHeight
+        offset = newOffset
+    }
+
+    /// Updates the full viewport geometry (height + width) and re-clamps the offset.
+    /// Called on initial layout and on terminal resize (#0009).
+    func setViewport(height: Int, width: Int) {
+        let newHeight = max(0, height)
+        let newWidth = max(0, width)
+        let newOffset = min(offset, max(0, lineCount - newHeight))
+        guard newHeight != viewportHeight || newWidth != viewportWidth || newOffset != offset else { return }
+        objectWillChange.send()
+        viewportHeight = newHeight
+        viewportWidth = newWidth
         offset = newOffset
     }
 
