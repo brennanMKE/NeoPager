@@ -1,0 +1,18 @@
+# Normalize line endings to LF on checkin and checkout
+* text=auto eol=lf
+
+# Source and config files are always text with LF
+*.swift text eol=lf
+*.sh text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+Package.resolved text eol=lf
+
+# Binary attachments (issue screenshots, recordings)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.mov binary
+*.mp4 binary
