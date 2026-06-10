@@ -49,7 +49,20 @@ struct NeoPager: ParsableCommand {
                     break // unused in phase 1; search input arrives in phase 2
                 }
             }
-            app.start() // calls dispatchMain(); never returns
+
+            // Recompute the viewport on terminal resize (#0009). SwiftTUI re-lays
+            // out its own layer on SIGWINCH, but only PagerState knows the pager's
+            // height/width and offset, so it needs its own observer. Held for the
+            // process lifetime (start() never returns).
+            let resizeSource = DispatchSource.makeSignalSource(signal: SIGWINCH, queue: .main)
+            resizeSource.setEventHandler {
+                guard let size = TerminalSize.current() else { return }
+                state.setViewport(height: max(1, size.rows - 1), width: size.columns)
+            }
+            resizeSource.resume()
+            withExtendedLifetime(resizeSource) {
+                app.start() // calls dispatchMain(); never returns
+            }
         }
     }
 }

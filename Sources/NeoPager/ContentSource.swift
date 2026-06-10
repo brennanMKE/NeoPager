@@ -54,11 +54,36 @@ enum ContentSource {
     }
 
     /// Splits text into newline-delimited lines. A single trailing newline does
-    /// not produce a spurious empty final line; CRLF carriage returns are stripped.
+    /// not produce a spurious empty final line; CRLF carriage returns are stripped;
+    /// tabs are expanded to spaces so one buffer line maps to one screen row and
+    /// column-based truncation stays accurate (#0009).
     nonisolated static func splitLines(_ text: String) -> [String] {
         if text.isEmpty { return [] }
         var lines = text.components(separatedBy: "\n")
         if lines.last == "" { lines.removeLast() }
-        return lines.map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 }
+        return lines.map { line in
+            let stripped = line.hasSuffix("\r") ? String(line.dropLast()) : line
+            return expandTabs(stripped)
+        }
+    }
+
+    /// Expands tab characters to spaces using fixed 8-column tab stops, the
+    /// terminal default. Done at load time so tabs never reach the renderer, where
+    /// they would break column-truncation math (#0009).
+    nonisolated static func expandTabs(_ line: String, tabWidth: Int = 8) -> String {
+        guard line.contains("\t") else { return line }
+        var result = ""
+        var column = 0
+        for character in line {
+            if character == "\t" {
+                let spaces = tabWidth - (column % tabWidth)
+                result += String(repeating: " ", count: spaces)
+                column += spaces
+            } else {
+                result.append(character)
+                column += 1
+            }
+        }
+        return result
     }
 }
