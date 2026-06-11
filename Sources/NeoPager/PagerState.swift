@@ -85,14 +85,23 @@ nonisolated final class PagerState: ObservableObject {
     /// The flattened display rows for the current width / wrap mode.
     private(set) var displayRows: [DisplayRow] = []
 
+    /// Per-buffer-line ANSI style runs (#0012). Empty when content has no color.
+    let lineStyleRuns: [[StyleRun]]
+
     let objectWillChange = ObservableObjectPublisher()
 
-    init(lines: [String], viewportHeight: Int = 0, viewportWidth: Int = 0, wrapEnabled: Bool = true) {
+    init(lines: [String], viewportHeight: Int = 0, viewportWidth: Int = 0, wrapEnabled: Bool = true, styleRuns: [[StyleRun]] = []) {
         self.lines = lines
         self.viewportHeight = max(0, viewportHeight)
         self.viewportWidth = max(0, viewportWidth)
         self.wrapEnabled = wrapEnabled
+        self.lineStyleRuns = styleRuns
         rebuildDisplayRows()
+    }
+
+    /// The ANSI style runs on a given buffer line, for the view to color spans (#0012).
+    func styleRuns(onBufferLine line: Int) -> [StyleRun] {
+        lineStyleRuns.indices.contains(line) ? lineStyleRuns[line] : []
     }
 
     /// Number of buffer lines (the denominator of the `line/total` indicator).

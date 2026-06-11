@@ -8,6 +8,15 @@ enum ContentError: Error {
     case noInput
 }
 
+/// The result of loading content: the raw lines (escapes intact, for the no-pager
+/// print path #0018), the plain text the pager renders (escapes stripped, tabs
+/// expanded), and the per-line ANSI style runs (#0012).
+nonisolated struct LoadedContent {
+    let rawLines: [String]
+    let lines: [String]
+    let styleRuns: [[StyleRun]]
+}
+
 /// Loads all pager content up front into a line buffer, before the TUI starts.
 ///
 /// Phase 1 reads everything eagerly (like `more`; `less` streams). Reading the
@@ -15,20 +24,25 @@ enum ContentError: Error {
 /// interactive input to `/dev/tty`. Streaming/incremental reading is a possible
 /// later enhancement (noted in `PRD.md`), deliberately out of scope.
 enum ContentSource {
-    /// Reads content from `path` if given, otherwise from the stdin pipe.
+    /// Reads content from `path` if given, otherwise from the stdin pipe, then parses
+    /// ANSI color out of it (#0012).
     ///
     /// - Throws: `ContentError.noInput` when no file is given and stdin is a TTY;
     ///   `ContentError.fileNotReadable` when a given file cannot be read.
-    nonisolated static func load(path: String?) throws -> [String] {
+    nonisolated static func load(path: String?) throws -> LoadedContent {
+        let raw: [String]
         if let path {
-            return try loadFile(path)
+            raw = try loadFile(path)
+        } else {
+            // No file argument: only read stdin when it is a pipe/redirect, never an
+            // interactive terminal — don't sit waiting on an empty TTY like `more`.
+            guard isatty(STDIN_FILENO) == 0 else {
+                throw ContentError.noInput
+            }
+            raw = loadPipe()
         }
-        // No file argument: only read stdin when it is a pipe/redirect, never an
-        // interactive terminal — don't sit waiting on an empty TTY like `more`.
-        guard isatty(STDIN_FILENO) == 0 else {
-            throw ContentError.noInput
-        }
-        return loadPipe()
+        let parsed = AnsiParser.parse(raw)
+        return LoadedContent(rawLines: raw, lines: parsed.plain, styleRuns: parsed.runs)
     }
 
     private nonisolated static func loadFile(_ path: String) throws -> [String] {
@@ -53,37 +67,14 @@ enum ContentSource {
         String(decoding: data, as: UTF8.self)
     }
 
-    /// Splits text into newline-delimited lines. A single trailing newline does
-    /// not produce a spurious empty final line; CRLF carriage returns are stripped;
-    /// tabs are expanded to spaces so one buffer line maps to one screen row and
-    /// column-based truncation stays accurate (#0009).
+    /// Splits text into newline-delimited lines. A single trailing newline does not
+    /// produce a spurious empty final line; CRLF carriage returns are stripped. Tab
+    /// expansion and escape stripping are handled later by `AnsiParser` (#0012), which
+    /// must see the raw line to keep columns aligned with the styles.
     nonisolated static func splitLines(_ text: String) -> [String] {
         if text.isEmpty { return [] }
         var lines = text.components(separatedBy: "\n")
         if lines.last == "" { lines.removeLast() }
-        return lines.map { line in
-            let stripped = line.hasSuffix("\r") ? String(line.dropLast()) : line
-            return expandTabs(stripped)
-        }
-    }
-
-    /// Expands tab characters to spaces using fixed 8-column tab stops, the
-    /// terminal default. Done at load time so tabs never reach the renderer, where
-    /// they would break column-truncation math (#0009).
-    nonisolated static func expandTabs(_ line: String, tabWidth: Int = 8) -> String {
-        guard line.contains("\t") else { return line }
-        var result = ""
-        var column = 0
-        for character in line {
-            if character == "\t" {
-                let spaces = tabWidth - (column % tabWidth)
-                result += String(repeating: " ", count: spaces)
-                column += spaces
-            } else {
-                result.append(character)
-                column += 1
-            }
-        }
-        return result
+        return lines.map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 }
     }
 }

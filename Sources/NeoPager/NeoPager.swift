@@ -17,9 +17,9 @@ struct NeoPager: ParsableCommand {
     var chopLongLines = false
 
     mutating func run() throws {
-        let lines: [String]
+        let content: LoadedContent
         do {
-            lines = try ContentSource.load(path: file)
+            content = try ContentSource.load(path: file)
         } catch ContentError.noInput {
             throw ValidationError(
                 "No input. Pipe output in or pass a file:\n  some-command | neopager\n  neopager file.txt"
@@ -33,17 +33,19 @@ struct NeoPager: ParsableCommand {
         let size = TerminalSize.current() ?? (rows: 24, columns: 80)
         let viewportHeight = max(1, size.rows - 1)
         let state = PagerState(
-            lines: lines,
+            lines: content.lines,
             viewportHeight: viewportHeight,
             viewportWidth: size.columns,
-            wrapEnabled: !chopLongLines   // wrap by default; -S chops (#0019)
+            wrapEnabled: !chopLongLines,  // wrap by default; -S chops (#0019)
+            styleRuns: content.styleRuns  // ANSI colors (#0012)
         )
 
         // #0018: if all the content fits on one screen, don't take over the terminal
         // — print it and exit (like less -F). rowCount is wrap/chop-aware, and the
         // full terminal height is available since there's no status bar in this path.
+        // Print the raw lines so the terminal renders any ANSI color itself.
         if state.rowCount <= size.rows {
-            for line in lines { print(line) }
+            for line in content.rawLines { print(line) }
             return
         }
 

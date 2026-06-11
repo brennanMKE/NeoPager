@@ -26,26 +26,9 @@ import Testing
         #expect(ContentSource.splitLines("a\n\nb\n") == ["a", "", "b"])
     }
 
-    // MARK: - Tab expansion (#0009)
-
-    @Test func tabExpandsToNextEightColumnStop() {
-        #expect(ContentSource.expandTabs("a\tb") == "a       b") // 'a' at col 0, tab -> 7 spaces to col 8
-    }
-
-    @Test func tabAtColumnZero() {
-        #expect(ContentSource.expandTabs("\tx") == "        x") // 8 spaces
-    }
-
-    @Test func multipleTabs() {
-        #expect(ContentSource.expandTabs("ab\tcd\te") == "ab      cd      e")
-    }
-
-    @Test func lineWithoutTabsUnchanged() {
-        #expect(ContentSource.expandTabs("no tabs here") == "no tabs here")
-    }
-
-    @Test func tabsExpandedDuringSplit() {
-        #expect(ContentSource.splitLines("a\tb\n") == ["a       b"])
+    @Test func splitLinesLeavesTabsAndEscapesForTheParser() {
+        // Tab expansion / escape stripping now happen in AnsiParser, not splitLines.
+        #expect(ContentSource.splitLines("a\tb\n") == ["a\tb"])
     }
 
     // MARK: - Lossy UTF-8
