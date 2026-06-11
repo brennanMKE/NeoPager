@@ -179,6 +179,66 @@ final class PagerStateTests: XCTestCase {
         XCTAssertEqual(t.offset, 2, "clamps at maxOffset")
     }
 
+    // MARK: - Wrapping (#0019)
+
+    private func wrapLines() -> [String] {
+        ["short", String(repeating: "x", count: 25), "end"]
+    }
+
+    func testWrapSplitsLongLineIntoDisplayRows() {
+        let s = PagerState(lines: wrapLines(), viewportHeight: 10, viewportWidth: 10, wrapEnabled: true)
+        XCTAssertEqual(s.lineCount, 3)
+        XCTAssertEqual(s.rowCount, 5) // short | x*10 | x*10 | x*5 | end
+        XCTAssertEqual(s.displayRows.map(\.bufferLine), [0, 1, 1, 1, 2])
+        XCTAssertEqual(s.displayRows[1].text, String(repeating: "x", count: 10))
+        XCTAssertEqual(s.displayRows[3].text, String(repeating: "x", count: 5))
+    }
+
+    func testChopModeIsOneRowPerLine() {
+        let s = PagerState(lines: wrapLines(), viewportHeight: 10, viewportWidth: 10, wrapEnabled: false)
+        XCTAssertEqual(s.rowCount, 3)
+        XCTAssertEqual(s.displayRows[1].text.count, 25, "chop keeps the full line; the view truncates")
+    }
+
+    func testWidthZeroMeansNoWrap() {
+        let s = PagerState(lines: wrapLines(), viewportHeight: 10, viewportWidth: 0, wrapEnabled: true)
+        XCTAssertEqual(s.rowCount, 3)
+    }
+
+    func testBottomBufferLineInWrapMode() {
+        let s = PagerState(lines: wrapLines(), viewportHeight: 10, viewportWidth: 10) // all 5 rows visible
+        XCTAssertEqual(s.bottomBufferLine, 3)
+        XCTAssertEqual(s.lineCount, 3)
+    }
+
+    func testScrollingMovesThroughDisplayRows() {
+        let s = PagerState(lines: wrapLines(), viewportHeight: 2, viewportWidth: 10)
+        XCTAssertEqual(s.rowCount, 5)
+        XCTAssertEqual(s.maxOffset, 3)
+        s.lineDown()
+        XCTAssertEqual(s.offset, 1)
+        XCTAssertEqual(s.visibleLines(), [String(repeating: "x", count: 10), String(repeating: "x", count: 10)])
+        XCTAssertEqual(s.bottomBufferLine, 2, "both visible rows belong to buffer line 2 (1-based)")
+    }
+
+    func testToggleWrapPreservesTopBufferLine() {
+        let s = PagerState(lines: wrapLines(), viewportHeight: 2, viewportWidth: 10)
+        s.lineDown() // offset 1 -> top display row belongs to buffer line index 1
+        s.setWrap(false)
+        XCTAssertFalse(s.wrapEnabled)
+        XCTAssertEqual(s.rowCount, 3)
+        XCTAssertEqual(s.offset, 1, "top stays on the same buffer line after un-wrapping")
+    }
+
+    func testResizeRewrapsKeepingTopLine() {
+        let s = PagerState(lines: wrapLines(), viewportHeight: 3, viewportWidth: 10)
+        // scroll so the top is inside the long line (buffer line 1)
+        s.lineDown(); s.lineDown() // offset 2, top display row is the 2nd x-segment (buffer line 1)
+        XCTAssertEqual(s.displayRows[s.offset].bufferLine, 1)
+        s.setViewport(height: 3, width: 5) // narrower: the 25-char line now wraps into 5 rows
+        XCTAssertEqual(s.displayRows[s.offset].bufferLine, 1, "still anchored on buffer line 1 after re-wrap")
+    }
+
     // MARK: - Change notifications
 
     func testObjectWillChangeFiresOnRealMoveOnly() {

@@ -12,6 +12,10 @@ struct NeoPager: ParsableCommand {
     @Argument(help: "File to page. If omitted, content is read from a stdin pipe.")
     var file: String?
 
+    @Flag(name: [.customShort("S"), .customLong("chop-long-lines")],
+          help: "Chop long lines at the right edge instead of wrapping them.")
+    var chopLongLines = false
+
     mutating func run() throws {
         let lines: [String]
         do {
@@ -28,8 +32,12 @@ struct NeoPager: ParsableCommand {
         // Size the viewport from the terminal (status bar reserves one row).
         let size = TerminalSize.current() ?? (rows: 24, columns: 80)
         let viewportHeight = max(1, size.rows - 1)
-        let state = PagerState(lines: lines, viewportHeight: viewportHeight)
-        state.setViewport(height: viewportHeight, width: size.columns)
+        let state = PagerState(
+            lines: lines,
+            viewportHeight: viewportHeight,
+            viewportWidth: size.columns,
+            wrapEnabled: !chopLongLines   // wrap by default; -S chops (#0019)
+        )
 
         // Rebind keyboard input to the controlling terminal before SwiftTUI takes
         // over stdin — in `cmd | neopager`, fd 0 is the now-drained pipe (#0003).

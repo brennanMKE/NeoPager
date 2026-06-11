@@ -35,8 +35,7 @@ struct StatusBar: View {
     /// Right-side position indicator: percentage (or `END` at the bottom) plus the
     /// last visible line number over the total.
     private var positionText: String {
-        let bottomLine = min(state.offset + state.viewportHeight, state.lineCount)
         let progress = state.atEnd ? "END" : "\(state.positionPercent)%"
-        return "\(progress) \(bottomLine)/\(state.lineCount)"
+        return "\(progress) \(state.bottomBufferLine)/\(state.lineCount)"
     }
 }

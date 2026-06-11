@@ -1,57 +1,91 @@
 import Combine
 
+/// One rendered row of the viewport: a (possibly wrapped) segment of a buffer line,
+/// tagged with the index of the buffer line it came from.
+nonisolated struct DisplayRow: Equatable {
+    /// 0-based index into `PagerState.lines` this row belongs to.
+    let bufferLine: Int
+    /// The text of this row — a full buffer line (chop mode) or a width-wide
+    /// wrapped segment (wrap mode).
+    let text: String
+}
+
 /// Observable scroll model for the pager.
 ///
 /// Pure logic — no SwiftTUI imports — so the clamp/boundary behavior is testable
-/// without a terminal. SwiftTUI views observe it through Combine `ObservableObject`
-/// (`objectWillChange`), which is what triggers a re-render when the offset moves.
+/// without a terminal. SwiftTUI views observe it through Combine `ObservableObject`.
+///
+/// The scroll offset indexes **display rows**, not buffer lines (#0019): when
+/// wrapping is on, a buffer line wider than the viewport becomes several display
+/// rows. With `viewportWidth == 0` (or wrapping off) there is exactly one display
+/// row per buffer line, so the model reduces to the simple 1:1 case.
 nonisolated final class PagerState: ObservableObject {
     /// The full content buffer, loaded up front. Immutable for the pager's lifetime.
     let lines: [String]
 
-    /// Number of content rows visible at once (terminal height minus the status bar).
+    /// Number of display rows visible at once (terminal height minus the status bar).
     private(set) var viewportHeight: Int
 
-    /// Terminal width in columns, used for truncation and status-bar layout.
-    private(set) var viewportWidth: Int = 0
+    /// Terminal width in columns. `0` means "unbounded" — no wrapping.
+    private(set) var viewportWidth: Int
 
-    /// Index of the first visible line (0-based). Always within `0 ... maxOffset`.
+    /// When true, long lines wrap onto continuation rows; when false they are chopped
+    /// (one display row per buffer line) and the view truncates to width (#0016).
+    private(set) var wrapEnabled: Bool
+
+    /// Index of the first visible display row (0-based). Always within `0 ... maxOffset`.
     private(set) var offset: Int = 0
+
+    /// The flattened display rows for the current width / wrap mode.
+    private(set) var displayRows: [DisplayRow] = []
 
     let objectWillChange = ObservableObjectPublisher()
 
-    init(lines: [String], viewportHeight: Int = 0) {
+    init(lines: [String], viewportHeight: Int = 0, viewportWidth: Int = 0, wrapEnabled: Bool = true) {
         self.lines = lines
         self.viewportHeight = max(0, viewportHeight)
+        self.viewportWidth = max(0, viewportWidth)
+        self.wrapEnabled = wrapEnabled
+        rebuildDisplayRows()
     }
 
+    /// Number of buffer lines (the denominator of the `line/total` indicator).
     var lineCount: Int { lines.count }
 
-    /// Largest valid offset — the last line sits at the bottom of the viewport.
-    /// Zero when all content fits, so there is nothing to scroll.
-    var maxOffset: Int { max(0, lineCount - viewportHeight) }
+    /// Number of display rows after wrapping.
+    var rowCount: Int { displayRows.count }
 
-    /// True when the last line is visible (including when all content fits in the
-    /// viewport). The status bar surfaces this as `END`.
+    /// Largest valid offset — the last display row sits at the bottom of the viewport.
+    /// Zero when all content fits, so there is nothing to scroll.
+    var maxOffset: Int { max(0, rowCount - viewportHeight) }
+
+    /// True when the last display row is visible (including when all content fits).
     var atEnd: Bool { offset >= maxOffset }
 
-    /// True when the first line is visible.
+    /// True when the first display row is visible.
     var atTop: Bool { offset <= 0 }
 
-    /// Scroll progress as a whole percentage — 0 at the top, 100 at the bottom
-    /// clamp (and 100 when all content fits, since the end is already on screen).
+    /// Scroll progress as a whole percentage — 0 at the top, 100 at the bottom clamp.
     var positionPercent: Int {
         guard maxOffset > 0 else { return 100 }
         return Int((Double(offset) / Double(maxOffset) * 100).rounded())
     }
 
-    // MARK: - Movement
+    /// 1-based buffer line number of the bottom visible display row, for the status
+    /// bar's `line/total`. Zero when there is no content.
+    var bottomBufferLine: Int {
+        guard !displayRows.isEmpty, viewportHeight > 0 else { return 0 }
+        let lastVisible = min(offset + viewportHeight - 1, rowCount - 1)
+        return displayRows[max(0, lastVisible)].bufferLine + 1
+    }
 
-    /// Scroll up one line. No-op (no wrap, no bell, no exit) when already at the top.
+    // MARK: - Movement (all operate in display-row space)
+
+    /// Scroll up one row. No-op (no wrap, no bell, no exit) when already at the top.
     func lineUp() { setOffset(offset - 1) }
 
-    /// Scroll down one line. No-op when already at the bottom — crucially, reaching
-    /// the bottom never exits the pager (the original sin of `more`).
+    /// Scroll down one row. No-op when already at the bottom — reaching the bottom
+    /// never exits the pager (the original sin of `more`).
     func lineDown() { setOffset(offset + 1) }
 
     /// Scroll up one full viewport. Clamps at the top.
@@ -60,54 +94,99 @@ nonisolated final class PagerState: ObservableObject {
     /// Scroll down one full viewport. Clamps at the bottom.
     func pageDown() { setOffset(offset + viewportHeight) }
 
-    /// Scroll up half a viewport (#0017). Gentler than a full page for reading.
+    /// Scroll up half a viewport (#0017).
     func halfPageUp() { setOffset(offset - max(1, viewportHeight / 2)) }
 
-    /// Scroll down half a viewport (#0017). Clamps at the bottom; never exits.
+    /// Scroll down half a viewport (#0017).
     func halfPageDown() { setOffset(offset + max(1, viewportHeight / 2)) }
 
-    /// Jump to the first line (#0015). No-op when already at the top.
+    /// Jump to the first row (#0015). No-op when already at the top.
     func scrollToTop() { setOffset(0) }
 
-    /// Jump so the last line sits at the bottom (#0015). No-op when already at the end.
+    /// Jump so the last row sits at the bottom (#0015). No-op when already at the end.
     func scrollToBottom() { setOffset(maxOffset) }
 
-    /// Updates the viewport height (e.g. on terminal resize) and re-clamps the
-    /// offset so the view stays valid — shrinking near the bottom must not leave
-    /// blank rows below the last line.
+    // MARK: - Geometry / mode changes
+
+    /// Updates the viewport height and re-clamps the offset so the view stays valid.
     func setViewportHeight(_ height: Int) {
-        let newHeight = max(0, height)
-        let newOffset = min(offset, max(0, lineCount - newHeight))
-        guard newHeight != viewportHeight || newOffset != offset else { return }
-        objectWillChange.send()
-        viewportHeight = newHeight
-        offset = newOffset
+        setViewport(height: height, width: viewportWidth)
     }
 
-    /// Updates the full viewport geometry (height + width) and re-clamps the offset.
-    /// Called on initial layout and on terminal resize (#0009).
+    /// Updates the full viewport geometry (height + width), re-wraps for the new
+    /// width, and keeps the top buffer line stable across the reflow (#0009/#0019).
     func setViewport(height: Int, width: Int) {
         let newHeight = max(0, height)
         let newWidth = max(0, width)
-        let newOffset = min(offset, max(0, lineCount - newHeight))
-        guard newHeight != viewportHeight || newWidth != viewportWidth || newOffset != offset else { return }
+        guard newHeight != viewportHeight || newWidth != viewportWidth else { return }
+        let topLine = currentTopBufferLine()
         objectWillChange.send()
         viewportHeight = newHeight
         viewportWidth = newWidth
-        offset = newOffset
+        rebuildDisplayRows()
+        offset = clampedOffset(firstRowIndex(ofBufferLine: topLine))
     }
 
-    /// The slice of lines currently visible, top-aligned. Safe for any offset and
-    /// any viewport size; returns an empty slice when there is nothing to show.
-    func visibleLines() -> ArraySlice<String> {
-        guard viewportHeight > 0, !lines.isEmpty else { return [] }
-        let end = min(offset + viewportHeight, lineCount)
+    /// Toggles wrap vs chop, re-wrapping and keeping the top buffer line stable (#0019).
+    func setWrap(_ enabled: Bool) {
+        guard enabled != wrapEnabled else { return }
+        let topLine = currentTopBufferLine()
+        objectWillChange.send()
+        wrapEnabled = enabled
+        rebuildDisplayRows()
+        offset = clampedOffset(firstRowIndex(ofBufferLine: topLine))
+    }
+
+    // MARK: - Rendering
+
+    /// The display-row texts currently visible, top-aligned. Empty when there is
+    /// nothing to show.
+    func visibleLines() -> [String] {
+        guard viewportHeight > 0, !displayRows.isEmpty else { return [] }
+        let end = min(offset + viewportHeight, rowCount)
         let start = min(offset, end)
-        return lines[start..<end]
+        return displayRows[start..<end].map(\.text)
+    }
+
+    // MARK: - Internals
+
+    private func rebuildDisplayRows() {
+        var rows: [DisplayRow] = []
+        rows.reserveCapacity(lines.count)
+        let width = viewportWidth
+        for (index, line) in lines.enumerated() {
+            if wrapEnabled, width > 0, line.count > width {
+                var start = line.startIndex
+                while start < line.endIndex {
+                    let end = line.index(start, offsetBy: width, limitedBy: line.endIndex) ?? line.endIndex
+                    rows.append(DisplayRow(bufferLine: index, text: String(line[start..<end])))
+                    start = end
+                }
+            } else {
+                rows.append(DisplayRow(bufferLine: index, text: line))
+            }
+        }
+        displayRows = rows
+    }
+
+    /// The buffer line shown at the top of the viewport right now (used to keep the
+    /// reading position stable across a re-wrap).
+    private func currentTopBufferLine() -> Int {
+        guard !displayRows.isEmpty else { return 0 }
+        return displayRows[min(max(0, offset), displayRows.count - 1)].bufferLine
+    }
+
+    /// Index of the first display row belonging to `bufferLine` (or later).
+    private func firstRowIndex(ofBufferLine bufferLine: Int) -> Int {
+        displayRows.firstIndex { $0.bufferLine >= bufferLine } ?? 0
+    }
+
+    private func clampedOffset(_ value: Int) -> Int {
+        min(max(0, value), maxOffset)
     }
 
     private func setOffset(_ newValue: Int) {
-        let clamped = min(max(0, newValue), maxOffset)
+        let clamped = clampedOffset(newValue)
         // No-op past either end: don't emit a change, so the view doesn't repaint.
         guard clamped != offset else { return }
         objectWillChange.send()
