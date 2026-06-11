@@ -45,8 +45,15 @@ struct NeoPager: ParsableCommand {
                 case .pageUp:   state.pageUp()
                 case .pageDown: state.pageDown()
                 case .escape:   app?.quit()
-                case .left, .right, .enter, .backspace, .char:
-                    break // unused in phase 1; search input arrives in phase 2
+                case .char(let character):
+                    switch character {
+                    case " ":         state.pageDown()  // #0014 Space pages down
+                    case "b", "B":    state.pageUp()    // #0014 b pages up (less convention)
+                    case "q", "Q":    app?.quit()       // #0013 q quits, like Esc
+                    default:          break             // other chars: search input (phase 2)
+                    }
+                case .left, .right, .enter, .backspace:
+                    break // unused in phase 1
                 }
             }
 
