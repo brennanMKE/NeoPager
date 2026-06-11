@@ -39,6 +39,14 @@ struct NeoPager: ParsableCommand {
             wrapEnabled: !chopLongLines   // wrap by default; -S chops (#0019)
         )
 
+        // #0018: if all the content fits on one screen, don't take over the terminal
+        // — print it and exit (like less -F). rowCount is wrap/chop-aware, and the
+        // full terminal height is available since there's no status bar in this path.
+        if state.rowCount <= size.rows {
+            for line in lines { print(line) }
+            return
+        }
+
         // Rebind keyboard input to the controlling terminal before SwiftTUI takes
         // over stdin — in `cmd | neopager`, fd 0 is the now-drained pipe (#0003).
         TTYInput.reattachToControllingTerminal()
