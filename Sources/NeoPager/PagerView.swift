@@ -13,15 +13,19 @@ struct PagerView: View {
     @ObservedObject var state: PagerState
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(rows) { row in
-                Text(row.text)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+        if state.showingHelp {
+            HelpView()
+        } else {
+            VStack(spacing: 0) {
+                ForEach(rows) { row in
+                    Text(row.text)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+                Spacer()
+                StatusBar(state: state)
             }
-            Spacer()
-            StatusBar(state: state)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     /// The visible lines as identifiable rows. The id is the row's position within

@@ -274,6 +274,20 @@ import Testing
         #expect(s.horizontalOffset == 0)
     }
 
+    // MARK: - Help overlay (#0020)
+
+    @Test func helpFlagTogglesAndPreservesScroll() {
+        let s = PagerState(lines: makeLines(100), viewportHeight: 10)
+        s.pageDown() // offset 10
+        #expect(!s.showingHelp)
+        s.setShowingHelp(true)
+        #expect(s.showingHelp)
+        #expect(s.offset == 10, "showing help leaves the scroll position untouched")
+        s.setShowingHelp(false)
+        #expect(!s.showingHelp)
+        #expect(s.offset == 10)
+    }
+
     // MARK: - Change notifications
 
     @Test func objectWillChangeFiresOnRealMoveOnly() {

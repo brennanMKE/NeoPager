@@ -40,6 +40,9 @@ nonisolated final class PagerState: ObservableObject {
     /// where nothing is hidden off the right edge.
     private(set) var horizontalOffset: Int = 0
 
+    /// Whether the help overlay is showing (#0020).
+    private(set) var showingHelp = false
+
     /// The flattened display rows for the current width / wrap mode.
     private(set) var displayRows: [DisplayRow] = []
 
@@ -145,6 +148,14 @@ nonisolated final class PagerState: ObservableObject {
         rebuildDisplayRows()
         offset = clampedOffset(firstRowIndex(ofBufferLine: topLine))
         horizontalOffset = min(horizontalOffset, maxHorizontalOffset)
+    }
+
+    /// Shows or hides the help overlay (#0020). Scroll position is untouched, so
+    /// closing help returns to exactly where the reader was.
+    func setShowingHelp(_ showing: Bool) {
+        guard showing != showingHelp else { return }
+        objectWillChange.send()
+        showingHelp = showing
     }
 
     /// Toggles wrap vs chop, re-wrapping and keeping the top buffer line stable (#0019).

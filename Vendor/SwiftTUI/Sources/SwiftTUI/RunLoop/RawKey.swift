@@ -14,6 +14,7 @@ public enum RawKeyEvent: Equatable {
     case up, down, left, right
     case pageUp, pageDown
     case home, end
+    case f1
     case escape
     case enter
     case backspace
@@ -110,6 +111,7 @@ public enum RawKeyParser {
             case "D": return .left
             case "H": return .home
             case "F": return .end
+            case "P": return .f1   // SS3 F1
             default: return nil
             }
         }
@@ -128,6 +130,7 @@ public enum RawKeyParser {
             case "4", "8": return .end     // End
             case "5": return .pageUp       // Page Up
             case "6": return .pageDown     // Page Down
+            case "11": return .f1          // F1 (CSI form)
             default: return nil
             }
         default:

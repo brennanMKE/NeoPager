@@ -55,6 +55,12 @@ struct NeoPager: ParsableCommand {
         MainActor.assumeIsolated {
             let app = Application(rootView: PagerView(state: state))
             app.keyHandler = { [weak app] event in
+                // While help is showing it's modal: any key closes it and does
+                // nothing else (#0020).
+                if state.showingHelp {
+                    state.setShowingHelp(false)
+                    return
+                }
                 switch event {
                 case .up:       state.lineUp()
                 case .down:     state.lineDown()
@@ -64,17 +70,19 @@ struct NeoPager: ParsableCommand {
                 case .end:      state.scrollToBottom() // #0015 End -> bottom
                 case .left:     state.scrollLeft()     // #0016 horizontal scroll (chop mode)
                 case .right:    state.scrollRight()    // #0016 horizontal scroll (chop mode)
+                case .f1:       state.setShowingHelp(true) // #0020 F1 opens help
                 case .escape:   app?.quit()
                 case .char(let character):
                     switch character {
-                    case " ":         state.pageDown()       // #0014 Space pages down
-                    case "b", "B":    state.pageUp()         // #0014 b pages up (less convention)
-                    case "d":         state.halfPageDown()   // #0017 half-page down
-                    case "u":         state.halfPageUp()     // #0017 half-page up
-                    case "g":         state.scrollToTop()    // #0015 g -> top
-                    case "G":         state.scrollToBottom() // #0015 G -> bottom
-                    case "q", "Q":    app?.quit()            // #0013 q quits, like Esc
-                    default:          break                  // other chars: search input (phase 2)
+                    case " ":         state.pageDown()           // #0014 Space pages down
+                    case "b", "B":    state.pageUp()             // #0014 b pages up (less convention)
+                    case "d":         state.halfPageDown()       // #0017 half-page down
+                    case "u":         state.halfPageUp()         // #0017 half-page up
+                    case "g":         state.scrollToTop()        // #0015 g -> top
+                    case "G":         state.scrollToBottom()     // #0015 G -> bottom
+                    case "h":         state.setShowingHelp(true) // #0020 h opens help
+                    case "q", "Q":    app?.quit()                // #0013 q quits, like Esc
+                    default:          break                      // other chars: search input (phase 2)
                     }
                 case .enter, .backspace:
                     break // unused in phase 1

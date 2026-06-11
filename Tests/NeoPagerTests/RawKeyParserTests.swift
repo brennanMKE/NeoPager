@@ -79,6 +79,13 @@ import SwiftTUI
         #expect(parse("\u{1b}OF") == [.end])
     }
 
+    // MARK: - F1 (#0020)
+
+    @Test func f1KeySS3AndCSI() {
+        #expect(parse("\u{1b}OP") == [.f1])    // SS3 form
+        #expect(parse("\u{1b}[11~") == [.f1])  // CSI form
+    }
+
     // MARK: - Esc / Enter / Backspace
 
     @Test func bareEscape() {
