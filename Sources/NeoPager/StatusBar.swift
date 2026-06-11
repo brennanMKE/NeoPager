@@ -10,8 +10,8 @@ import SwiftTUI
 struct StatusBar: View {
     @ObservedObject var state: PagerState
 
-    private static let legend = "↑/↓ line · ⌥↑/⌥↓ page · Esc/q quit"
-    private static let shortLegend = "↑/↓ ⌥↑/⌥↓ Esc/q"
+    private static let legend = "↑/↓ line · ⌥↑/⌥↓ page · Esc quit"
+    private static let shortLegend = "↑/↓ ⌥↑/⌥↓ Esc"
 
     var body: some View {
         let width = state.viewportWidth
