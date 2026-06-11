@@ -61,6 +61,18 @@ struct NeoPager: ParsableCommand {
                     state.setShowingHelp(false)
                     return
                 }
+                // Search-input mode is modal (#0010): keys edit the query, and the
+                // pager's normal bindings (q, b, Space, …) are literal characters.
+                if state.isSearching {
+                    switch event {
+                    case .char(let character): state.appendSearchChar(character)
+                    case .backspace:           state.backspaceSearch()
+                    case .enter:               state.executeSearch()
+                    case .escape:              state.cancelSearch()
+                    default:                   break
+                    }
+                    return
+                }
                 switch event {
                 case .up:       state.lineUp()
                 case .down:     state.lineDown()
@@ -71,7 +83,10 @@ struct NeoPager: ParsableCommand {
                 case .left:     state.scrollLeft()     // #0016 horizontal scroll (chop mode)
                 case .right:    state.scrollRight()    // #0016 horizontal scroll (chop mode)
                 case .f1:       state.setShowingHelp(true) // #0020 F1 opens help
-                case .escape:   app?.quit()
+                case .escape:
+                    // First Esc clears active highlights; a second Esc exits (#0010).
+                    if state.hasActiveSearch { state.clearSearch() }
+                    else { app?.quit() }
                 case .char(let character):
                     switch character {
                     case " ":         state.pageDown()           // #0014 Space pages down
@@ -81,8 +96,11 @@ struct NeoPager: ParsableCommand {
                     case "g":         state.scrollToTop()        // #0015 g -> top
                     case "G":         state.scrollToBottom()     // #0015 G -> bottom
                     case "h":         state.setShowingHelp(true) // #0020 h opens help
+                    case "/":         state.beginSearch()        // #0010 enter search
+                    case "n":         state.nextMatch()          // #0011 next match
+                    case "N":         state.previousMatch()      // #0011 previous match
                     case "q", "Q":    app?.quit()                // #0013 q quits, like Esc
-                    default:          break                      // other chars: search input (phase 2)
+                    default:          break
                     }
                 case .enter, .backspace:
                     break // unused in phase 1

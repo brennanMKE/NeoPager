@@ -1,12 +1,34 @@
 import Combine
+import Foundation
 
 /// One rendered row of the viewport: a (possibly wrapped) segment of a buffer line,
 /// tagged with the index of the buffer line it came from.
 nonisolated struct DisplayRow: Equatable {
     /// 0-based index into `PagerState.lines` this row belongs to.
     let bufferLine: Int
+    /// Column within the buffer line where `text` begins (0 for chop mode and the
+    /// first wrap segment; `k * width` for the k-th wrap segment). Lets matches be
+    /// mapped onto the right row (#0010).
+    let startColumn: Int
     /// The text of this row — a full buffer line (chop mode) or a width-wide
     /// wrapped segment (wrap mode).
+    let text: String
+}
+
+/// A search match: a column range within one buffer line (#0010).
+nonisolated struct SearchMatch: Equatable {
+    let bufferLine: Int
+    let start: Int   // column offset in the buffer line
+    let length: Int
+    var end: Int { start + length }
+}
+
+/// One visible row prepared for rendering: its text already windowed to the
+/// viewport width, plus where that text starts in the buffer line so the view can
+/// place search highlights (#0010).
+nonisolated struct RenderRow: Equatable {
+    let bufferLine: Int
+    let startColumn: Int
     let text: String
 }
 
@@ -42,6 +64,23 @@ nonisolated final class PagerState: ObservableObject {
 
     /// Whether the help overlay is showing (#0020).
     private(set) var showingHelp = false
+
+    // MARK: - Search state (#0010 / #0011)
+
+    /// The query being typed, while in search-input mode. `nil` when not typing.
+    private(set) var searchInput: String?
+
+    /// The most recently executed query ("" if none).
+    private(set) var activeQuery = ""
+
+    /// All matches for the active query, in (line, column) order.
+    private(set) var matches: [SearchMatch] = []
+
+    /// Index into `matches` of the current match (for n/N and the `match N/M` count).
+    private(set) var currentMatchIndex = 0
+
+    /// A transient status message (e.g. `no matches for "x"`, `last match`).
+    private(set) var searchStatus: String?
 
     /// The flattened display rows for the current width / wrap mode.
     private(set) var displayRows: [DisplayRow] = []
@@ -158,6 +197,149 @@ nonisolated final class PagerState: ObservableObject {
         showingHelp = showing
     }
 
+    // MARK: - Search (#0010 / #0011)
+
+    /// True while the user is typing a query — the key handler routes input to it.
+    var isSearching: Bool { searchInput != nil }
+
+    /// True when there are active highlights / results to clear.
+    var hasActiveSearch: Bool { !matches.isEmpty || searchStatus != nil || !activeQuery.isEmpty }
+
+    /// The current match, if any (highlighted distinctly; #0011).
+    var currentMatch: SearchMatch? {
+        matches.indices.contains(currentMatchIndex) ? matches[currentMatchIndex] : nil
+    }
+
+    /// Matches that fall on a given buffer line, for highlighting (#0010).
+    func matches(onBufferLine line: Int) -> [SearchMatch] {
+        matches.filter { $0.bufferLine == line }
+    }
+
+    /// Enter search-input mode (`/`).
+    func beginSearch() {
+        objectWillChange.send()
+        searchInput = ""
+        searchStatus = nil
+    }
+
+    /// Append a typed character to the query.
+    func appendSearchChar(_ character: Character) {
+        guard searchInput != nil else { return }
+        objectWillChange.send()
+        searchInput?.append(character)
+    }
+
+    /// Backspace in the query; on an empty query this cancels search-input mode.
+    func backspaceSearch() {
+        guard let input = searchInput else { return }
+        objectWillChange.send()
+        if input.isEmpty {
+            searchInput = nil
+        } else {
+            searchInput?.removeLast()
+        }
+    }
+
+    /// Cancel search-input mode and clear any highlights (Esc while typing).
+    func cancelSearch() {
+        objectWillChange.send()
+        searchInput = nil
+        clearResults()
+    }
+
+    /// Clear active highlights/results without affecting input mode (Esc after a search).
+    func clearSearch() {
+        guard hasActiveSearch else { return }
+        objectWillChange.send()
+        clearResults()
+    }
+
+    /// Run the typed query: find all matches, jump to the first at/after the current
+    /// top, and keep the highlights. Reports `no matches` when empty.
+    func executeSearch() {
+        guard let query = searchInput else { return }
+        objectWillChange.send()
+        searchInput = nil
+        activeQuery = query
+        guard !query.isEmpty else { clearResults(); return }
+        matches = findMatches(query)
+        guard !matches.isEmpty else {
+            searchStatus = "no matches for \"\(query)\""
+            currentMatchIndex = 0
+            return
+        }
+        searchStatus = nil
+        let topLine = currentTopBufferLine()
+        currentMatchIndex = matches.firstIndex { $0.bufferLine >= topLine } ?? 0
+        scrollToMatch(currentMatchIndex)
+    }
+
+    /// Advance to the next match (#0011). Clamps — no wrap — flashing `last match`
+    /// at the end. The first `n` after a search continues from the match nearest the
+    /// viewport (set by `executeSearch`); subsequent presses step by index.
+    func nextMatch() {
+        guard !matches.isEmpty else { return }
+        if currentMatchIndex + 1 < matches.count {
+            setCurrentMatch(currentMatchIndex + 1)
+        } else {
+            objectWillChange.send()
+            searchStatus = "last match"
+        }
+    }
+
+    /// Step back to the previous match (#0011). Clamps, flashing `first match`.
+    func previousMatch() {
+        guard !matches.isEmpty else { return }
+        if currentMatchIndex > 0 {
+            setCurrentMatch(currentMatchIndex - 1)
+        } else {
+            objectWillChange.send()
+            searchStatus = "first match"
+        }
+    }
+
+    private func setCurrentMatch(_ index: Int) {
+        objectWillChange.send()
+        currentMatchIndex = index
+        searchStatus = nil
+        scrollToMatch(index)
+    }
+
+    private func clearResults() {
+        activeQuery = ""
+        matches = []
+        searchStatus = nil
+        currentMatchIndex = 0
+    }
+
+    /// Scrolls so the display row holding `matches[index]` is at the top.
+    private func scrollToMatch(_ index: Int) {
+        guard matches.indices.contains(index) else { return }
+        let match = matches[index]
+        let rowIndex = displayRows.firstIndex { row in
+            row.bufferLine == match.bufferLine
+                && match.start >= row.startColumn
+                && match.start < row.startColumn + max(1, row.text.count)
+        } ?? displayRows.firstIndex { $0.bufferLine == match.bufferLine } ?? 0
+        offset = clampedOffset(rowIndex)
+    }
+
+    private func findMatches(_ query: String) -> [SearchMatch] {
+        guard !query.isEmpty else { return [] }
+        var result: [SearchMatch] = []
+        for (index, line) in lines.enumerated() {
+            var searchStart = line.startIndex
+            while searchStart < line.endIndex,
+                  let range = line.range(of: query, options: .caseInsensitive, range: searchStart..<line.endIndex) {
+                let start = line.distance(from: line.startIndex, to: range.lowerBound)
+                let length = line.distance(from: range.lowerBound, to: range.upperBound)
+                result.append(SearchMatch(bufferLine: index, start: start, length: length))
+                searchStart = range.upperBound // non-overlapping matches
+            }
+        }
+        return result
+    }
+
     /// Toggles wrap vs chop, re-wrapping and keeping the top buffer line stable (#0019).
     func setWrap(_ enabled: Bool) {
         guard enabled != wrapEnabled else { return }
@@ -179,15 +361,22 @@ nonisolated final class PagerState: ObservableObject {
         return displayRows[start..<end]
     }
 
-    /// The visible text for each row, already windowed to the viewport width: in wrap
-    /// mode the rows are width-wide segments; in chop mode the horizontal window
-    /// `[horizontalOffset, +viewportWidth)` is applied so the view renders directly.
-    func visibleLines() -> [String] {
-        let rows = visibleDisplayRows()
-        if wrapEnabled || viewportWidth <= 0 {
-            return rows.map(\.text)
+    /// The visible rows prepared for rendering: text already windowed to the viewport
+    /// width, with the buffer line and start column so the view can place highlights.
+    /// In wrap mode rows are width-wide segments; in chop mode the horizontal window
+    /// `[horizontalOffset, +viewportWidth)` is applied.
+    func visibleRenderRows() -> [RenderRow] {
+        visibleDisplayRows().map { row in
+            if wrapEnabled || viewportWidth <= 0 {
+                return RenderRow(bufferLine: row.bufferLine, startColumn: row.startColumn, text: row.text)
+            }
+            return RenderRow(bufferLine: row.bufferLine, startColumn: horizontalOffset, text: horizontalWindow(row.text))
         }
-        return rows.map { horizontalWindow($0.text) }
+    }
+
+    /// The visible row texts, already windowed to the viewport width.
+    func visibleLines() -> [String] {
+        visibleRenderRows().map(\.text)
     }
 
     /// Applies the chop-mode horizontal window to one row's text.
@@ -212,13 +401,15 @@ nonisolated final class PagerState: ObservableObject {
         for (index, line) in lines.enumerated() {
             if wrapEnabled, width > 0, line.count > width {
                 var start = line.startIndex
+                var column = 0
                 while start < line.endIndex {
                     let end = line.index(start, offsetBy: width, limitedBy: line.endIndex) ?? line.endIndex
-                    rows.append(DisplayRow(bufferLine: index, text: String(line[start..<end])))
+                    rows.append(DisplayRow(bufferLine: index, startColumn: column, text: String(line[start..<end])))
+                    column += width
                     start = end
                 }
             } else {
-                rows.append(DisplayRow(bufferLine: index, text: line))
+                rows.append(DisplayRow(bufferLine: index, startColumn: 0, text: line))
             }
         }
         displayRows = rows

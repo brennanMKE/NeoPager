@@ -288,6 +288,96 @@ import Testing
         #expect(s.offset == 10)
     }
 
+    // MARK: - Search (#0010 / #0011)
+
+    private func search(_ s: PagerState, _ query: String) {
+        s.beginSearch()
+        for c in query { s.appendSearchChar(c) }
+        s.executeSearch()
+    }
+
+    @Test func searchFindsCaseInsensitiveMatches() {
+        let s = PagerState(lines: ["Foo bar", "baz FOO", "nothing"], viewportHeight: 2)
+        search(s, "foo")
+        #expect(s.matches == [
+            SearchMatch(bufferLine: 0, start: 0, length: 3),
+            SearchMatch(bufferLine: 1, start: 4, length: 3),
+        ])
+        #expect(s.activeQuery == "foo")
+        #expect(!s.isSearching)
+    }
+
+    @Test func searchMatchesAreNonOverlapping() {
+        let s = PagerState(lines: ["aaaa"], viewportHeight: 1)
+        search(s, "aa")
+        #expect(s.matches.map(\.start) == [0, 2]) // [0,2) then [2,4), not [1,3)
+    }
+
+    @Test func searchJumpsToFirstMatchAtOrAfterTop() {
+        let s = PagerState(lines: (0..<100).map { $0 == 50 ? "needle here" : "line \($0)" }, viewportHeight: 10)
+        search(s, "needle")
+        #expect(s.matches.count == 1)
+        #expect(s.offset == 50)
+        #expect(s.currentMatchIndex == 0)
+    }
+
+    @Test func searchNoMatchesSetsStatusAndDoesNotMove() {
+        let s = PagerState(lines: makeLines(100), viewportHeight: 10)
+        s.pageDown() // offset 10
+        search(s, "zzzznotfound")
+        #expect(s.matches.isEmpty)
+        #expect(s.searchStatus == "no matches for \"zzzznotfound\"")
+        #expect(s.offset == 10)
+    }
+
+    @Test func nextAndPreviousMatchNavigateAndClamp() {
+        let lines = (0..<30).map { $0 % 10 == 0 ? "hit \($0)" : "x" } // hits at lines 0, 10, 20
+        let s = PagerState(lines: lines, viewportHeight: 5)
+        search(s, "hit")
+        #expect(s.matches.count == 3)
+        #expect(s.currentMatchIndex == 0)
+        s.nextMatch()
+        #expect(s.currentMatchIndex == 1)
+        #expect(s.offset == 10)
+        s.nextMatch()
+        #expect(s.currentMatchIndex == 2)
+        s.nextMatch() // clamp at the end (no wrap)
+        #expect(s.currentMatchIndex == 2)
+        #expect(s.searchStatus == "last match")
+        s.previousMatch()
+        #expect(s.currentMatchIndex == 1)
+    }
+
+    @Test func clearSearchRemovesHighlights() {
+        let s = PagerState(lines: ["foo"], viewportHeight: 1)
+        search(s, "foo")
+        #expect(s.hasActiveSearch)
+        s.clearSearch()
+        #expect(s.matches.isEmpty)
+        #expect(!s.hasActiveSearch)
+    }
+
+    @Test func backspaceEditsQueryAndCancelsWhenEmpty() {
+        let s = PagerState(lines: ["foo"], viewportHeight: 1)
+        s.beginSearch(); s.appendSearchChar("f"); s.appendSearchChar("x")
+        #expect(s.searchInput == "fx")
+        s.backspaceSearch()
+        #expect(s.searchInput == "f")
+        s.backspaceSearch()
+        #expect(s.searchInput == "")
+        s.backspaceSearch() // empty -> leaves input mode
+        #expect(s.searchInput == nil)
+        #expect(!s.isSearching)
+    }
+
+    @Test func matchesOnBufferLineFiltersCorrectly() {
+        let s = PagerState(lines: ["foo foo", "bar", "foo"], viewportHeight: 3)
+        search(s, "foo")
+        #expect(s.matches(onBufferLine: 0).count == 2)
+        #expect(s.matches(onBufferLine: 1).isEmpty)
+        #expect(s.matches(onBufferLine: 2).count == 1)
+    }
+
     // MARK: - Change notifications
 
     @Test func objectWillChangeFiresOnRealMoveOnly() {
