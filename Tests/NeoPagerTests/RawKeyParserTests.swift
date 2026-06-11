@@ -60,6 +60,25 @@ final class RawKeyParserTests: XCTestCase {
         XCTAssertEqual(parse("\u{1b}\u{1b}[B"), [.pageDown])
     }
 
+    // MARK: - Home / End (#0015)
+
+    func testHomeAndEndCSI() {
+        XCTAssertEqual(parse("\u{1b}[H"), [.home])
+        XCTAssertEqual(parse("\u{1b}[F"), [.end])
+    }
+
+    func testHomeAndEndVT220Tilde() {
+        XCTAssertEqual(parse("\u{1b}[1~"), [.home])
+        XCTAssertEqual(parse("\u{1b}[7~"), [.home])
+        XCTAssertEqual(parse("\u{1b}[4~"), [.end])
+        XCTAssertEqual(parse("\u{1b}[8~"), [.end])
+    }
+
+    func testHomeAndEndSS3() {
+        XCTAssertEqual(parse("\u{1b}OH"), [.home])
+        XCTAssertEqual(parse("\u{1b}OF"), [.end])
+    }
+
     // MARK: - Esc / Enter / Backspace
 
     func testBareEscape() {

@@ -60,6 +60,18 @@ nonisolated final class PagerState: ObservableObject {
     /// Scroll down one full viewport. Clamps at the bottom.
     func pageDown() { setOffset(offset + viewportHeight) }
 
+    /// Scroll up half a viewport (#0017). Gentler than a full page for reading.
+    func halfPageUp() { setOffset(offset - max(1, viewportHeight / 2)) }
+
+    /// Scroll down half a viewport (#0017). Clamps at the bottom; never exits.
+    func halfPageDown() { setOffset(offset + max(1, viewportHeight / 2)) }
+
+    /// Jump to the first line (#0015). No-op when already at the top.
+    func scrollToTop() { setOffset(0) }
+
+    /// Jump so the last line sits at the bottom (#0015). No-op when already at the end.
+    func scrollToBottom() { setOffset(maxOffset) }
+
     /// Updates the viewport height (e.g. on terminal resize) and re-clamps the
     /// offset so the view stays valid — shrinking near the bottom must not leave
     /// blank rows below the last line.

@@ -140,6 +140,45 @@ final class PagerStateTests: XCTestCase {
         XCTAssertTrue(s.visibleLines().isEmpty)
     }
 
+    // MARK: - Jump to top/bottom (#0015) and half-page (#0017)
+
+    func testScrollToBottomAndTop() {
+        let s = PagerState(lines: makeLines(100), viewportHeight: 10) // maxOffset 90
+        s.scrollToBottom()
+        XCTAssertEqual(s.offset, 90)
+        XCTAssertTrue(s.atEnd)
+        s.scrollToTop()
+        XCTAssertEqual(s.offset, 0)
+        XCTAssertTrue(s.atTop)
+    }
+
+    func testScrollToTopBottomAreNoOpsAtEnds() {
+        let s = PagerState(lines: makeLines(100), viewportHeight: 10)
+        s.scrollToTop()                 // already at top
+        XCTAssertEqual(s.offset, 0)
+        s.scrollToBottom(); s.scrollToBottom() // second is a no-op
+        XCTAssertEqual(s.offset, 90)
+    }
+
+    func testHalfPageMovesByHalfViewport() {
+        let s = PagerState(lines: makeLines(100), viewportHeight: 10) // half = 5
+        s.halfPageDown()
+        XCTAssertEqual(s.offset, 5)
+        s.halfPageDown()
+        XCTAssertEqual(s.offset, 10)
+        s.halfPageUp()
+        XCTAssertEqual(s.offset, 5)
+    }
+
+    func testHalfPageClampsAndAtLeastOne() {
+        let s = PagerState(lines: makeLines(100), viewportHeight: 1) // half = max(1, 0) = 1
+        s.halfPageDown()
+        XCTAssertEqual(s.offset, 1, "half of a 1-row viewport still moves at least one line")
+        let t = PagerState(lines: makeLines(12), viewportHeight: 10) // maxOffset 2, half 5
+        t.halfPageDown()
+        XCTAssertEqual(t.offset, 2, "clamps at maxOffset")
+    }
+
     // MARK: - Change notifications
 
     func testObjectWillChangeFiresOnRealMoveOnly() {

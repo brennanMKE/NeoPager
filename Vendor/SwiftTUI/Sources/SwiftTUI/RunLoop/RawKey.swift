@@ -13,6 +13,7 @@ import Foundation
 public enum RawKeyEvent: Equatable {
     case up, down, left, right
     case pageUp, pageDown
+    case home, end
     case escape
     case enter
     case backspace
@@ -107,6 +108,8 @@ public enum RawKeyParser {
             case "B": return .down
             case "C": return .right
             case "D": return .left
+            case "H": return .home
+            case "F": return .end
             default: return nil
             }
         }
@@ -117,10 +120,14 @@ public enum RawKeyParser {
         case "B": return params == "1;3" ? .pageDown : .down
         case "C": return .right
         case "D": return .left
+        case "H": return .home   // CSI H (often unparameterized Home)
+        case "F": return .end    // CSI F (End)
         case "~":
             switch params {
-            case "5": return .pageUp   // Page Up
-            case "6": return .pageDown // Page Down
+            case "1", "7": return .home    // Home (vt220 / rxvt forms)
+            case "4", "8": return .end     // End
+            case "5": return .pageUp       // Page Up
+            case "6": return .pageDown     // Page Down
             default: return nil
             }
         default:
