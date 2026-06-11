@@ -1,10 +1,10 @@
-import XCTest
+import Testing
 import SwiftTUI
 @testable import NeoPager
 
 /// Tests for the vendored-SwiftTUI key decoder (#0004), including the printable
 /// keys the pager binds for paging/quit (#0013, #0014).
-final class RawKeyParserTests: XCTestCase {
+@Suite struct RawKeyParserTests {
 
     private func parse(_ s: String) -> [RawKeyEvent] {
         RawKeyParser.parse(s)
@@ -12,94 +12,94 @@ final class RawKeyParserTests: XCTestCase {
 
     // MARK: - Printable keys (Space / b / q bindings)
 
-    func testSpaceIsPrintableChar() {
-        XCTAssertEqual(parse(" "), [.char(" ")])
+    @Test func spaceIsPrintableChar() {
+        #expect(parse(" ") == [.char(" ")])
     }
 
-    func testBAndQArePrintableChars() {
-        XCTAssertEqual(parse("b"), [.char("b")])
-        XCTAssertEqual(parse("q"), [.char("q")])
+    @Test func bAndQArePrintableChars() {
+        #expect(parse("b") == [.char("b")])
+        #expect(parse("q") == [.char("q")])
     }
 
-    func testMultiplePrintableChars() {
-        XCTAssertEqual(parse("abc"), [.char("a"), .char("b"), .char("c")])
+    @Test func multiplePrintableChars() {
+        #expect(parse("abc") == [.char("a"), .char("b"), .char("c")])
     }
 
-    func testControlBytesBelowSpaceAreSkipped() {
-        XCTAssertEqual(parse("\u{01}"), []) // Ctrl-A, not a printable char
+    @Test func controlBytesBelowSpaceAreSkipped() {
+        #expect(parse("\u{01}") == []) // Ctrl-A, not a printable char
     }
 
     // MARK: - Arrows
 
-    func testCSIArrows() {
-        XCTAssertEqual(parse("\u{1b}[A"), [.up])
-        XCTAssertEqual(parse("\u{1b}[B"), [.down])
-        XCTAssertEqual(parse("\u{1b}[C"), [.right])
-        XCTAssertEqual(parse("\u{1b}[D"), [.left])
+    @Test func csiArrows() {
+        #expect(parse("\u{1b}[A") == [.up])
+        #expect(parse("\u{1b}[B") == [.down])
+        #expect(parse("\u{1b}[C") == [.right])
+        #expect(parse("\u{1b}[D") == [.left])
     }
 
-    func testSS3Arrows() {
-        XCTAssertEqual(parse("\u{1b}OA"), [.up])
-        XCTAssertEqual(parse("\u{1b}OB"), [.down])
+    @Test func ss3Arrows() {
+        #expect(parse("\u{1b}OA") == [.up])
+        #expect(parse("\u{1b}OB") == [.down])
     }
 
     // MARK: - Page movement
 
-    func testPageKeys() {
-        XCTAssertEqual(parse("\u{1b}[5~"), [.pageUp])
-        XCTAssertEqual(parse("\u{1b}[6~"), [.pageDown])
+    @Test func pageKeys() {
+        #expect(parse("\u{1b}[5~") == [.pageUp])
+        #expect(parse("\u{1b}[6~") == [.pageDown])
     }
 
-    func testOptionArrowsXtermModifierForm() {
-        XCTAssertEqual(parse("\u{1b}[1;3A"), [.pageUp])
-        XCTAssertEqual(parse("\u{1b}[1;3B"), [.pageDown])
+    @Test func optionArrowsXtermModifierForm() {
+        #expect(parse("\u{1b}[1;3A") == [.pageUp])
+        #expect(parse("\u{1b}[1;3B") == [.pageDown])
     }
 
-    func testOptionArrowsEscEscForm() {
-        XCTAssertEqual(parse("\u{1b}\u{1b}[A"), [.pageUp])
-        XCTAssertEqual(parse("\u{1b}\u{1b}[B"), [.pageDown])
+    @Test func optionArrowsEscEscForm() {
+        #expect(parse("\u{1b}\u{1b}[A") == [.pageUp])
+        #expect(parse("\u{1b}\u{1b}[B") == [.pageDown])
     }
 
     // MARK: - Home / End (#0015)
 
-    func testHomeAndEndCSI() {
-        XCTAssertEqual(parse("\u{1b}[H"), [.home])
-        XCTAssertEqual(parse("\u{1b}[F"), [.end])
+    @Test func homeAndEndCSI() {
+        #expect(parse("\u{1b}[H") == [.home])
+        #expect(parse("\u{1b}[F") == [.end])
     }
 
-    func testHomeAndEndVT220Tilde() {
-        XCTAssertEqual(parse("\u{1b}[1~"), [.home])
-        XCTAssertEqual(parse("\u{1b}[7~"), [.home])
-        XCTAssertEqual(parse("\u{1b}[4~"), [.end])
-        XCTAssertEqual(parse("\u{1b}[8~"), [.end])
+    @Test func homeAndEndVT220Tilde() {
+        #expect(parse("\u{1b}[1~") == [.home])
+        #expect(parse("\u{1b}[7~") == [.home])
+        #expect(parse("\u{1b}[4~") == [.end])
+        #expect(parse("\u{1b}[8~") == [.end])
     }
 
-    func testHomeAndEndSS3() {
-        XCTAssertEqual(parse("\u{1b}OH"), [.home])
-        XCTAssertEqual(parse("\u{1b}OF"), [.end])
+    @Test func homeAndEndSS3() {
+        #expect(parse("\u{1b}OH") == [.home])
+        #expect(parse("\u{1b}OF") == [.end])
     }
 
     // MARK: - Esc / Enter / Backspace
 
-    func testBareEscape() {
-        XCTAssertEqual(parse("\u{1b}"), [.escape])
+    @Test func bareEscape() {
+        #expect(parse("\u{1b}") == [.escape])
     }
 
-    func testEnterAndBackspace() {
-        XCTAssertEqual(parse("\r"), [.enter])
-        XCTAssertEqual(parse("\n"), [.enter])
-        XCTAssertEqual(parse("\u{7f}"), [.backspace])
-        XCTAssertEqual(parse("\u{08}"), [.backspace])
+    @Test func enterAndBackspace() {
+        #expect(parse("\r") == [.enter])
+        #expect(parse("\n") == [.enter])
+        #expect(parse("\u{7f}") == [.backspace])
+        #expect(parse("\u{08}") == [.backspace])
     }
 
     // MARK: - Mixed chunks
 
-    func testArrowFollowedByChar() {
-        XCTAssertEqual(parse("\u{1b}[Bq"), [.down, .char("q")])
+    @Test func arrowFollowedByChar() {
+        #expect(parse("\u{1b}[Bq") == [.down, .char("q")])
     }
 
-    func testCtrlArrowFallsBackToPlainArrow() {
+    @Test func ctrlArrowFallsBackToPlainArrow() {
         // 1;5 is the Ctrl modifier; not Option, so it's a plain line move.
-        XCTAssertEqual(parse("\u{1b}[1;5A"), [.up])
+        #expect(parse("\u{1b}[1;5A") == [.up])
     }
 }

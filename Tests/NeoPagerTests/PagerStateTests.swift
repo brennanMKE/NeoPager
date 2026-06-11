@@ -1,8 +1,8 @@
 import Combine
-import XCTest
+import Testing
 @testable import NeoPager
 
-final class PagerStateTests: XCTestCase {
+@Suite struct PagerStateTests {
 
     private func makeLines(_ n: Int) -> [String] {
         (1...n).map { "line \($0)" }
@@ -10,173 +10,173 @@ final class PagerStateTests: XCTestCase {
 
     // MARK: - Line movement & clamping
 
-    func testStartsAtTop() {
+    @Test func startsAtTop() {
         let s = PagerState(lines: makeLines(100), viewportHeight: 10)
-        XCTAssertEqual(s.offset, 0)
-        XCTAssertTrue(s.atTop)
-        XCTAssertFalse(s.atEnd)
+        #expect(s.offset == 0)
+        #expect(s.atTop)
+        #expect(!s.atEnd)
     }
 
-    func testLineDownAndUp() {
+    @Test func lineDownAndUp() {
         let s = PagerState(lines: makeLines(100), viewportHeight: 10)
         s.lineDown()
-        XCTAssertEqual(s.offset, 1)
+        #expect(s.offset == 1)
         s.lineDown()
-        XCTAssertEqual(s.offset, 2)
+        #expect(s.offset == 2)
         s.lineUp()
-        XCTAssertEqual(s.offset, 1)
+        #expect(s.offset == 1)
     }
 
-    func testLineUpClampsAtTop() {
+    @Test func lineUpClampsAtTop() {
         let s = PagerState(lines: makeLines(100), viewportHeight: 10)
         s.lineUp()
         s.lineUp()
-        XCTAssertEqual(s.offset, 0, "scrolling up past the top is a no-op")
-        XCTAssertTrue(s.atTop)
+        #expect(s.offset == 0, "scrolling up past the top is a no-op")
+        #expect(s.atTop)
     }
 
-    func testLineDownClampsAtBottomAndNeverExits() {
+    @Test func lineDownClampsAtBottomAndNeverExits() {
         let s = PagerState(lines: makeLines(15), viewportHeight: 10) // maxOffset = 5
         for _ in 0..<100 { s.lineDown() }
-        XCTAssertEqual(s.offset, 5, "offset clamps to lineCount - viewportHeight")
-        XCTAssertTrue(s.atEnd)
+        #expect(s.offset == 5, "offset clamps to lineCount - viewportHeight")
+        #expect(s.atEnd)
         // Reaching the bottom is a no-op, not an exit: further movement still clamps.
         s.lineDown()
-        XCTAssertEqual(s.offset, 5)
+        #expect(s.offset == 5)
     }
 
     // MARK: - Page movement
 
-    func testPageMovesByViewportHeight() {
+    @Test func pageMovesByViewportHeight() {
         let s = PagerState(lines: makeLines(100), viewportHeight: 10) // maxOffset = 90
         s.pageDown()
-        XCTAssertEqual(s.offset, 10)
+        #expect(s.offset == 10)
         s.pageDown()
-        XCTAssertEqual(s.offset, 20)
+        #expect(s.offset == 20)
         s.pageUp()
-        XCTAssertEqual(s.offset, 10)
+        #expect(s.offset == 10)
     }
 
-    func testPageDownClampsAtBottom() {
+    @Test func pageDownClampsAtBottom() {
         let s = PagerState(lines: makeLines(25), viewportHeight: 10) // maxOffset = 15
         s.pageDown() // 10
         s.pageDown() // would be 20 -> clamps to 15
-        XCTAssertEqual(s.offset, 15)
-        XCTAssertTrue(s.atEnd)
+        #expect(s.offset == 15)
+        #expect(s.atEnd)
     }
 
-    func testPageUpClampsAtTop() {
+    @Test func pageUpClampsAtTop() {
         let s = PagerState(lines: makeLines(25), viewportHeight: 10)
         s.pageDown() // 10
         s.pageUp()   // 0
         s.pageUp()   // clamps at 0
-        XCTAssertEqual(s.offset, 0)
+        #expect(s.offset == 0)
     }
 
     // MARK: - Content shorter than the viewport
 
-    func testShortContentAllMovementIsNoOp() {
+    @Test func shortContentAllMovementIsNoOp() {
         let s = PagerState(lines: makeLines(3), viewportHeight: 10) // maxOffset = 0
-        XCTAssertEqual(s.maxOffset, 0)
-        XCTAssertTrue(s.atEnd)
-        XCTAssertTrue(s.atTop)
+        #expect(s.maxOffset == 0)
+        #expect(s.atEnd)
+        #expect(s.atTop)
         s.lineDown(); s.pageDown(); s.lineUp()
-        XCTAssertEqual(s.offset, 0)
-        XCTAssertEqual(s.positionPercent, 100)
+        #expect(s.offset == 0)
+        #expect(s.positionPercent == 100)
     }
 
     // MARK: - Position percentage
 
-    func testPositionPercent() {
+    @Test func positionPercent() {
         let s = PagerState(lines: makeLines(110), viewportHeight: 10) // maxOffset = 100
-        XCTAssertEqual(s.positionPercent, 0)
+        #expect(s.positionPercent == 0)
         s.pageDown() // offset 10
-        XCTAssertEqual(s.positionPercent, 10)
+        #expect(s.positionPercent == 10)
         for _ in 0..<100 { s.lineDown() } // clamp to 100
-        XCTAssertEqual(s.positionPercent, 100)
-        XCTAssertTrue(s.atEnd)
+        #expect(s.positionPercent == 100)
+        #expect(s.atEnd)
     }
 
     // MARK: - Resize re-clamping
 
-    func testShrinkViewportReclampsOffset() {
+    @Test func shrinkViewportReclampsOffset() {
         let s = PagerState(lines: makeLines(20), viewportHeight: 10) // maxOffset = 10
         for _ in 0..<100 { s.lineDown() } // offset 10 (at end)
-        XCTAssertEqual(s.offset, 10)
+        #expect(s.offset == 10)
         // Grow the viewport: maxOffset shrinks to 5, offset must re-clamp down.
         s.setViewportHeight(15) // maxOffset = 5
-        XCTAssertEqual(s.offset, 5, "growing the viewport re-clamps the offset down")
-        XCTAssertTrue(s.atEnd)
+        #expect(s.offset == 5, "growing the viewport re-clamps the offset down")
+        #expect(s.atEnd)
     }
 
-    func testGrowViewportToFitAllContent() {
+    @Test func growViewportToFitAllContent() {
         let s = PagerState(lines: makeLines(8), viewportHeight: 4)
         s.pageDown() // offset 4 (maxOffset = 4)
-        XCTAssertEqual(s.offset, 4)
+        #expect(s.offset == 4)
         s.setViewportHeight(20) // everything fits now
-        XCTAssertEqual(s.offset, 0)
-        XCTAssertEqual(s.maxOffset, 0)
+        #expect(s.offset == 0)
+        #expect(s.maxOffset == 0)
     }
 
     // MARK: - Visible slice
 
-    func testVisibleLinesSlice() {
+    @Test func visibleLinesSlice() {
         let s = PagerState(lines: makeLines(100), viewportHeight: 10)
-        XCTAssertEqual(Array(s.visibleLines()), (1...10).map { "line \($0)" })
+        #expect(s.visibleLines() == (1...10).map { "line \($0)" })
         s.pageDown() // offset 10
-        XCTAssertEqual(Array(s.visibleLines()), (11...20).map { "line \($0)" })
+        #expect(s.visibleLines() == (11...20).map { "line \($0)" })
     }
 
-    func testVisibleLinesNearBottomDoesNotOverflow() {
+    @Test func visibleLinesNearBottomDoesNotOverflow() {
         let s = PagerState(lines: makeLines(12), viewportHeight: 10) // maxOffset = 2
         for _ in 0..<100 { s.lineDown() } // offset 2
-        let visible = Array(s.visibleLines())
-        XCTAssertEqual(visible.count, 10)
-        XCTAssertEqual(visible.last, "line 12")
+        let visible = s.visibleLines()
+        #expect(visible.count == 10)
+        #expect(visible.last == "line 12")
     }
 
-    func testVisibleLinesEmptyWhenNoViewport() {
+    @Test func visibleLinesEmptyWhenNoViewport() {
         let s = PagerState(lines: makeLines(10), viewportHeight: 0)
-        XCTAssertTrue(s.visibleLines().isEmpty)
+        #expect(s.visibleLines().isEmpty)
     }
 
     // MARK: - Jump to top/bottom (#0015) and half-page (#0017)
 
-    func testScrollToBottomAndTop() {
+    @Test func scrollToBottomAndTop() {
         let s = PagerState(lines: makeLines(100), viewportHeight: 10) // maxOffset 90
         s.scrollToBottom()
-        XCTAssertEqual(s.offset, 90)
-        XCTAssertTrue(s.atEnd)
+        #expect(s.offset == 90)
+        #expect(s.atEnd)
         s.scrollToTop()
-        XCTAssertEqual(s.offset, 0)
-        XCTAssertTrue(s.atTop)
+        #expect(s.offset == 0)
+        #expect(s.atTop)
     }
 
-    func testScrollToTopBottomAreNoOpsAtEnds() {
+    @Test func scrollToTopBottomAreNoOpsAtEnds() {
         let s = PagerState(lines: makeLines(100), viewportHeight: 10)
         s.scrollToTop()                 // already at top
-        XCTAssertEqual(s.offset, 0)
+        #expect(s.offset == 0)
         s.scrollToBottom(); s.scrollToBottom() // second is a no-op
-        XCTAssertEqual(s.offset, 90)
+        #expect(s.offset == 90)
     }
 
-    func testHalfPageMovesByHalfViewport() {
+    @Test func halfPageMovesByHalfViewport() {
         let s = PagerState(lines: makeLines(100), viewportHeight: 10) // half = 5
         s.halfPageDown()
-        XCTAssertEqual(s.offset, 5)
+        #expect(s.offset == 5)
         s.halfPageDown()
-        XCTAssertEqual(s.offset, 10)
+        #expect(s.offset == 10)
         s.halfPageUp()
-        XCTAssertEqual(s.offset, 5)
+        #expect(s.offset == 5)
     }
 
-    func testHalfPageClampsAndAtLeastOne() {
+    @Test func halfPageClampsAndAtLeastOne() {
         let s = PagerState(lines: makeLines(100), viewportHeight: 1) // half = max(1, 0) = 1
         s.halfPageDown()
-        XCTAssertEqual(s.offset, 1, "half of a 1-row viewport still moves at least one line")
+        #expect(s.offset == 1, "half of a 1-row viewport still moves at least one line")
         let t = PagerState(lines: makeLines(12), viewportHeight: 10) // maxOffset 2, half 5
         t.halfPageDown()
-        XCTAssertEqual(t.offset, 2, "clamps at maxOffset")
+        #expect(t.offset == 2, "clamps at maxOffset")
     }
 
     // MARK: - Wrapping (#0019)
@@ -185,108 +185,108 @@ final class PagerStateTests: XCTestCase {
         ["short", String(repeating: "x", count: 25), "end"]
     }
 
-    func testWrapSplitsLongLineIntoDisplayRows() {
+    @Test func wrapSplitsLongLineIntoDisplayRows() {
         let s = PagerState(lines: wrapLines(), viewportHeight: 10, viewportWidth: 10, wrapEnabled: true)
-        XCTAssertEqual(s.lineCount, 3)
-        XCTAssertEqual(s.rowCount, 5) // short | x*10 | x*10 | x*5 | end
-        XCTAssertEqual(s.displayRows.map(\.bufferLine), [0, 1, 1, 1, 2])
-        XCTAssertEqual(s.displayRows[1].text, String(repeating: "x", count: 10))
-        XCTAssertEqual(s.displayRows[3].text, String(repeating: "x", count: 5))
+        #expect(s.lineCount == 3)
+        #expect(s.rowCount == 5) // short | x*10 | x*10 | x*5 | end
+        #expect(s.displayRows.map(\.bufferLine) == [0, 1, 1, 1, 2])
+        #expect(s.displayRows[1].text == String(repeating: "x", count: 10))
+        #expect(s.displayRows[3].text == String(repeating: "x", count: 5))
     }
 
-    func testChopModeIsOneRowPerLine() {
+    @Test func chopModeIsOneRowPerLine() {
         let s = PagerState(lines: wrapLines(), viewportHeight: 10, viewportWidth: 10, wrapEnabled: false)
-        XCTAssertEqual(s.rowCount, 3)
-        XCTAssertEqual(s.displayRows[1].text.count, 25, "chop keeps the full line; the view truncates")
+        #expect(s.rowCount == 3)
+        #expect(s.displayRows[1].text.count == 25, "chop keeps the full line; the view truncates")
     }
 
-    func testWidthZeroMeansNoWrap() {
+    @Test func widthZeroMeansNoWrap() {
         let s = PagerState(lines: wrapLines(), viewportHeight: 10, viewportWidth: 0, wrapEnabled: true)
-        XCTAssertEqual(s.rowCount, 3)
+        #expect(s.rowCount == 3)
     }
 
-    func testBottomBufferLineInWrapMode() {
+    @Test func bottomBufferLineInWrapMode() {
         let s = PagerState(lines: wrapLines(), viewportHeight: 10, viewportWidth: 10) // all 5 rows visible
-        XCTAssertEqual(s.bottomBufferLine, 3)
-        XCTAssertEqual(s.lineCount, 3)
+        #expect(s.bottomBufferLine == 3)
+        #expect(s.lineCount == 3)
     }
 
-    func testScrollingMovesThroughDisplayRows() {
+    @Test func scrollingMovesThroughDisplayRows() {
         let s = PagerState(lines: wrapLines(), viewportHeight: 2, viewportWidth: 10)
-        XCTAssertEqual(s.rowCount, 5)
-        XCTAssertEqual(s.maxOffset, 3)
+        #expect(s.rowCount == 5)
+        #expect(s.maxOffset == 3)
         s.lineDown()
-        XCTAssertEqual(s.offset, 1)
-        XCTAssertEqual(s.visibleLines(), [String(repeating: "x", count: 10), String(repeating: "x", count: 10)])
-        XCTAssertEqual(s.bottomBufferLine, 2, "both visible rows belong to buffer line 2 (1-based)")
+        #expect(s.offset == 1)
+        #expect(s.visibleLines() == [String(repeating: "x", count: 10), String(repeating: "x", count: 10)])
+        #expect(s.bottomBufferLine == 2, "both visible rows belong to buffer line 2 (1-based)")
     }
 
-    func testToggleWrapPreservesTopBufferLine() {
+    @Test func toggleWrapPreservesTopBufferLine() {
         let s = PagerState(lines: wrapLines(), viewportHeight: 2, viewportWidth: 10)
         s.lineDown() // offset 1 -> top display row belongs to buffer line index 1
         s.setWrap(false)
-        XCTAssertFalse(s.wrapEnabled)
-        XCTAssertEqual(s.rowCount, 3)
-        XCTAssertEqual(s.offset, 1, "top stays on the same buffer line after un-wrapping")
+        #expect(!s.wrapEnabled)
+        #expect(s.rowCount == 3)
+        #expect(s.offset == 1, "top stays on the same buffer line after un-wrapping")
     }
 
-    func testResizeRewrapsKeepingTopLine() {
+    @Test func resizeRewrapsKeepingTopLine() {
         let s = PagerState(lines: wrapLines(), viewportHeight: 3, viewportWidth: 10)
         // scroll so the top is inside the long line (buffer line 1)
         s.lineDown(); s.lineDown() // offset 2, top display row is the 2nd x-segment (buffer line 1)
-        XCTAssertEqual(s.displayRows[s.offset].bufferLine, 1)
+        #expect(s.displayRows[s.offset].bufferLine == 1)
         s.setViewport(height: 3, width: 5) // narrower: the 25-char line now wraps into 5 rows
-        XCTAssertEqual(s.displayRows[s.offset].bufferLine, 1, "still anchored on buffer line 1 after re-wrap")
+        #expect(s.displayRows[s.offset].bufferLine == 1, "still anchored on buffer line 1 after re-wrap")
     }
 
     // MARK: - Horizontal scroll in chop mode (#0016)
 
-    func testHorizontalScrollWindowsChoppedLine() {
+    @Test func horizontalScrollWindowsChoppedLine() {
         let s = PagerState(lines: ["abcdefghij"], viewportHeight: 1, viewportWidth: 4, wrapEnabled: false)
-        XCTAssertEqual(s.visibleLines(), ["abcd"])
+        #expect(s.visibleLines() == ["abcd"])
         s.scrollRight(by: 4)
-        XCTAssertEqual(s.horizontalOffset, 4)
-        XCTAssertEqual(s.visibleLines(), ["efgh"])
+        #expect(s.horizontalOffset == 4)
+        #expect(s.visibleLines() == ["efgh"])
     }
 
-    func testHorizontalScrollClampsAtBothEnds() {
+    @Test func horizontalScrollClampsAtBothEnds() {
         let s = PagerState(lines: ["abcdefghij"], viewportHeight: 1, viewportWidth: 4, wrapEnabled: false)
         s.scrollRight(by: 100)                  // max = 10 - 4 = 6
-        XCTAssertEqual(s.horizontalOffset, 6)
-        XCTAssertEqual(s.visibleLines(), ["ghij"])
+        #expect(s.horizontalOffset == 6)
+        #expect(s.visibleLines() == ["ghij"])
         s.scrollLeft(by: 100)                   // clamp at 0
-        XCTAssertEqual(s.horizontalOffset, 0)
-        XCTAssertEqual(s.visibleLines(), ["abcd"])
+        #expect(s.horizontalOffset == 0)
+        #expect(s.visibleLines() == ["abcd"])
     }
 
-    func testHorizontalScrollIsNoOpInWrapMode() {
+    @Test func horizontalScrollIsNoOpInWrapMode() {
         let s = PagerState(lines: [String(repeating: "x", count: 25)], viewportHeight: 5, viewportWidth: 10, wrapEnabled: true)
         s.scrollRight(by: 8)
-        XCTAssertEqual(s.horizontalOffset, 0, "wrap hides nothing, so horizontal scroll is a no-op")
-        XCTAssertEqual(s.maxHorizontalOffset, 0)
+        #expect(s.horizontalOffset == 0, "wrap hides nothing, so horizontal scroll is a no-op")
+        #expect(s.maxHorizontalOffset == 0)
     }
 
-    func testToggleToWrapResetsHorizontalOffset() {
+    @Test func toggleToWrapResetsHorizontalOffset() {
         let s = PagerState(lines: ["abcdefghij"], viewportHeight: 1, viewportWidth: 4, wrapEnabled: false)
         s.scrollRight(by: 4)
-        XCTAssertEqual(s.horizontalOffset, 4)
+        #expect(s.horizontalOffset == 4)
         s.setWrap(true)
-        XCTAssertEqual(s.horizontalOffset, 0)
+        #expect(s.horizontalOffset == 0)
     }
 
     // MARK: - Change notifications
 
-    func testObjectWillChangeFiresOnRealMoveOnly() {
+    @Test func objectWillChangeFiresOnRealMoveOnly() {
         let s = PagerState(lines: makeLines(100), viewportHeight: 10)
         var count = 0
         let c = s.objectWillChange.sink { count += 1 }
         defer { c.cancel() }
 
         s.lineDown()        // real move -> 1
-        XCTAssertEqual(count, 1)
+        #expect(count == 1)
         s.lineUp()          // real move -> 2
-        XCTAssertEqual(count, 2)
+        #expect(count == 2)
         s.lineUp()          // no-op at top -> still 2
-        XCTAssertEqual(count, 2)
+        #expect(count == 2)
     }
 }
