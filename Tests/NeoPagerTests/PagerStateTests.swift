@@ -239,6 +239,41 @@ final class PagerStateTests: XCTestCase {
         XCTAssertEqual(s.displayRows[s.offset].bufferLine, 1, "still anchored on buffer line 1 after re-wrap")
     }
 
+    // MARK: - Horizontal scroll in chop mode (#0016)
+
+    func testHorizontalScrollWindowsChoppedLine() {
+        let s = PagerState(lines: ["abcdefghij"], viewportHeight: 1, viewportWidth: 4, wrapEnabled: false)
+        XCTAssertEqual(s.visibleLines(), ["abcd"])
+        s.scrollRight(by: 4)
+        XCTAssertEqual(s.horizontalOffset, 4)
+        XCTAssertEqual(s.visibleLines(), ["efgh"])
+    }
+
+    func testHorizontalScrollClampsAtBothEnds() {
+        let s = PagerState(lines: ["abcdefghij"], viewportHeight: 1, viewportWidth: 4, wrapEnabled: false)
+        s.scrollRight(by: 100)                  // max = 10 - 4 = 6
+        XCTAssertEqual(s.horizontalOffset, 6)
+        XCTAssertEqual(s.visibleLines(), ["ghij"])
+        s.scrollLeft(by: 100)                   // clamp at 0
+        XCTAssertEqual(s.horizontalOffset, 0)
+        XCTAssertEqual(s.visibleLines(), ["abcd"])
+    }
+
+    func testHorizontalScrollIsNoOpInWrapMode() {
+        let s = PagerState(lines: [String(repeating: "x", count: 25)], viewportHeight: 5, viewportWidth: 10, wrapEnabled: true)
+        s.scrollRight(by: 8)
+        XCTAssertEqual(s.horizontalOffset, 0, "wrap hides nothing, so horizontal scroll is a no-op")
+        XCTAssertEqual(s.maxHorizontalOffset, 0)
+    }
+
+    func testToggleToWrapResetsHorizontalOffset() {
+        let s = PagerState(lines: ["abcdefghij"], viewportHeight: 1, viewportWidth: 4, wrapEnabled: false)
+        s.scrollRight(by: 4)
+        XCTAssertEqual(s.horizontalOffset, 4)
+        s.setWrap(true)
+        XCTAssertEqual(s.horizontalOffset, 0)
+    }
+
     // MARK: - Change notifications
 
     func testObjectWillChangeFiresOnRealMoveOnly() {

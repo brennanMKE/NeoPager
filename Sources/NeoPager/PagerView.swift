@@ -6,8 +6,9 @@ import SwiftTUI
 /// Only the visible lines are rendered (`PagerState.visibleLines()`), never the
 /// whole buffer — content can be hundreds of thousands of lines. A `Spacer` fills
 /// any unused height below short content so the status bar always sits on the
-/// bottom row. Long lines are truncated to the terminal width (phase 1 policy;
-/// refined in #0009).
+/// bottom row. `visibleLines()` already windows each row to the viewport width —
+/// wrap segments fit by construction, and chop-mode rows are sliced to the current
+/// horizontal offset (#0016) — so the view renders them directly.
 struct PagerView: View {
     @ObservedObject var state: PagerState
 
@@ -27,17 +28,9 @@ struct PagerView: View {
     /// the viewport (0-based), so as the slice scrolls SwiftTUI updates each row's
     /// text in place rather than treating scrolled lines as inserts/removals.
     private var rows: [Row] {
-        let width = state.viewportWidth
-        return state.visibleLines().enumerated().map { offset, line in
-            Row(id: offset, text: truncate(line, to: width))
+        state.visibleLines().enumerated().map { offset, line in
+            Row(id: offset, text: line)
         }
-    }
-
-    /// Truncates a line to `width` display columns. ASCII-accurate; wide characters,
-    /// tabs, and ANSI escapes are handled in #0009 / #0012.
-    private func truncate(_ line: String, to width: Int) -> String {
-        guard width > 0, line.count > width else { return line }
-        return String(line.prefix(width))
     }
 
     private struct Row: Identifiable {

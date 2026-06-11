@@ -36,6 +36,10 @@ nonisolated final class PagerState: ObservableObject {
     /// Index of the first visible display row (0-based). Always within `0 ... maxOffset`.
     private(set) var offset: Int = 0
 
+    /// Columns scrolled to the right in chop mode (#0016). Always 0 in wrap mode,
+    /// where nothing is hidden off the right edge.
+    private(set) var horizontalOffset: Int = 0
+
     /// The flattened display rows for the current width / wrap mode.
     private(set) var displayRows: [DisplayRow] = []
 
@@ -106,6 +110,21 @@ nonisolated final class PagerState: ObservableObject {
     /// Jump so the last row sits at the bottom (#0015). No-op when already at the end.
     func scrollToBottom() { setOffset(maxOffset) }
 
+    /// The furthest right the view can scroll: enough to bring the end of the widest
+    /// currently-visible line to the right edge. Always 0 in wrap mode (#0016).
+    var maxHorizontalOffset: Int {
+        guard !wrapEnabled, viewportWidth > 0 else { return 0 }
+        let widest = visibleDisplayRows().map(\.text.count).max() ?? 0
+        return max(0, widest - viewportWidth)
+    }
+
+    /// Scroll right by `step` columns (chop mode only; #0016). Clamps so the widest
+    /// visible line's end doesn't scroll past the right edge.
+    func scrollRight(by step: Int = 8) { setHorizontalOffset(horizontalOffset + step) }
+
+    /// Scroll left by `step` columns. Clamps at column 0.
+    func scrollLeft(by step: Int = 8) { setHorizontalOffset(horizontalOffset - step) }
+
     // MARK: - Geometry / mode changes
 
     /// Updates the viewport height and re-clamps the offset so the view stays valid.
@@ -125,6 +144,7 @@ nonisolated final class PagerState: ObservableObject {
         viewportWidth = newWidth
         rebuildDisplayRows()
         offset = clampedOffset(firstRowIndex(ofBufferLine: topLine))
+        horizontalOffset = min(horizontalOffset, maxHorizontalOffset)
     }
 
     /// Toggles wrap vs chop, re-wrapping and keeping the top buffer line stable (#0019).
@@ -133,19 +153,43 @@ nonisolated final class PagerState: ObservableObject {
         let topLine = currentTopBufferLine()
         objectWillChange.send()
         wrapEnabled = enabled
+        horizontalOffset = 0 // wrap hides nothing; chop starts un-scrolled
         rebuildDisplayRows()
         offset = clampedOffset(firstRowIndex(ofBufferLine: topLine))
     }
 
     // MARK: - Rendering
 
-    /// The display-row texts currently visible, top-aligned. Empty when there is
-    /// nothing to show.
-    func visibleLines() -> [String] {
+    /// The display rows currently visible, top-aligned.
+    func visibleDisplayRows() -> ArraySlice<DisplayRow> {
         guard viewportHeight > 0, !displayRows.isEmpty else { return [] }
         let end = min(offset + viewportHeight, rowCount)
         let start = min(offset, end)
-        return displayRows[start..<end].map(\.text)
+        return displayRows[start..<end]
+    }
+
+    /// The visible text for each row, already windowed to the viewport width: in wrap
+    /// mode the rows are width-wide segments; in chop mode the horizontal window
+    /// `[horizontalOffset, +viewportWidth)` is applied so the view renders directly.
+    func visibleLines() -> [String] {
+        let rows = visibleDisplayRows()
+        if wrapEnabled || viewportWidth <= 0 {
+            return rows.map(\.text)
+        }
+        return rows.map { horizontalWindow($0.text) }
+    }
+
+    /// Applies the chop-mode horizontal window to one row's text.
+    private func horizontalWindow(_ text: String) -> String {
+        let width = viewportWidth
+        guard width > 0 else { return text }
+        guard horizontalOffset > 0 else {
+            return text.count > width ? String(text.prefix(width)) : text
+        }
+        guard text.count > horizontalOffset else { return "" }
+        let start = text.index(text.startIndex, offsetBy: horizontalOffset)
+        let end = text.index(start, offsetBy: width, limitedBy: text.endIndex) ?? text.endIndex
+        return String(text[start..<end])
     }
 
     // MARK: - Internals
@@ -191,5 +235,12 @@ nonisolated final class PagerState: ObservableObject {
         guard clamped != offset else { return }
         objectWillChange.send()
         offset = clamped
+    }
+
+    private func setHorizontalOffset(_ newValue: Int) {
+        let clamped = min(max(0, newValue), maxHorizontalOffset)
+        guard clamped != horizontalOffset else { return }
+        objectWillChange.send()
+        horizontalOffset = clamped
     }
 }

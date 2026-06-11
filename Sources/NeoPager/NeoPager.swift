@@ -62,6 +62,8 @@ struct NeoPager: ParsableCommand {
                 case .pageDown: state.pageDown()
                 case .home:     state.scrollToTop()    // #0015 Home -> top
                 case .end:      state.scrollToBottom() // #0015 End -> bottom
+                case .left:     state.scrollLeft()     // #0016 horizontal scroll (chop mode)
+                case .right:    state.scrollRight()    // #0016 horizontal scroll (chop mode)
                 case .escape:   app?.quit()
                 case .char(let character):
                     switch character {
@@ -74,7 +76,7 @@ struct NeoPager: ParsableCommand {
                     case "q", "Q":    app?.quit()            // #0013 q quits, like Esc
                     default:          break                  // other chars: search input (phase 2)
                     }
-                case .left, .right, .enter, .backspace:
+                case .enter, .backspace:
                     break // unused in phase 1
                 }
             }
